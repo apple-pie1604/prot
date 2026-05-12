@@ -1,56 +1,48 @@
-name: Build Kivy APK (2026)
-on: [push]
+name: Build Signed APK
+
+on:
+  push:
+    branches: [ main ]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      # Step 1: Decode Keystore from base64
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android.jks
+
+      # Step 2: Build Release APK using Buildozer
+      - name: Build Release APK
+        uses: digreatbrian/buildozer-action@v2
         with:
-          python-version: '3.11' # Оптимальная версия для стабильной сборки Kivy/Buildozer
+          python-version: 3.11
+          buildozer-cmd: buildozer -v android release
 
-      # Кэшируем .venv и папки Buildozer для ускорения последующих сборок до 3-5 минут
-      - name: Cache Build Dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.buildozer
-            .buildozer
-            .venv
-          key: ${{ runner.os }}-kivy-build-${{ hashFiles('buildozer.spec') }}
-          restore-keys: |
-            ${{ runner.os }}-kivy-build-
-
-      # Установка системных библиотек Ubuntu, необходимых для компиляции Android SDK/NDK
-      - name: Install system dependencies
+      # Step 3: Sign the APK manually with .jks keystore
+      - name: Sign the APK manually
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ccache git libffi-dev libssl-dev autoconf automake \
-            libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev \
-            libtinfo5 cmake zip unzip openjdk-17-jdk
+          APK_PATH=$(find ./bin -name "*-release-unsigned.apk" | head -n 1)
+          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
+            -keystore android.jks \
+            -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
+            -keypass "${{ secrets.KEY_PASSWORD }}" \
+            "$APK_PATH" "${{ secrets.KEY_ALIAS }}"
 
-      # Создание venv, обновление pip и установка инструментов сборки
-      - name: Setup Virtual Environment and Tools
+      # Step 4: Rename the signed APK
+      - name: Rename the signed APK
         run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          python -m pip install --upgrade pip
-          pip install buildozer cython setuptools
+          APK_PATH=$(find ./bin -name "*-release-unsigned.apk" | head -n 1)
+          NEW_APK_PATH="${APK_PATH/-unsigned/-signed}"
+          mv "$APK_PATH" "$NEW_APK_PATH"
 
-      # Запуск сборки Buildozer строго внутри активированного виртуального окружения
-      - name: Build Android APK
-        run: |
-          source .venv/bin/activate
-          buildozer -v android debug
-
-      # Сохранение готового APK-файла в артефакты GitHub
-      - name: Upload APK Artifact
+      # Step 5: Upload Signed APK Artifact
+      - name: Upload Signed APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: android-debug-apk
-          path: bin/*.apk
+          name: signed-release-apk
+          path: ./bin/*-release-signed.apk
