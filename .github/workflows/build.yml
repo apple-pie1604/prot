@@ -1,4 +1,4 @@
-name: Build APK
+name: Build Kivy APK (2026)
 on: [push]
 
 jobs:
@@ -9,46 +9,48 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.11' # Оптимальная версия для стабильной сборки Kivy/Buildozer
 
-      # Кэширование зависимостей venv и системных пакетов Buildozer
-      - name: Cache Buildozer and Venv
+      # Кэшируем .venv и папки Buildozer для ускорения последующих сборок до 3-5 минут
+      - name: Cache Build Dependencies
         uses: actions/cache@v4
         with:
           path: |
             ~/.buildozer
             .buildozer
             .venv
-          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+          key: ${{ runner.os }}-kivy-build-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-
+            ${{ runner.os }}-kivy-build-
 
-      # Установка системных зависимостей, необходимых для сборки Android на Ubuntu
+      # Установка системных библиотек Ubuntu, необходимых для компиляции Android SDK/NDK
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ccache git libffi-dev libssl-dev autoconf automake libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake zip unzip openjdk-17-jdk
+          sudo apt-get install -y ccache git libffi-dev libssl-dev autoconf automake \
+            libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev \
+            libtinfo5 cmake zip unzip openjdk-17-jdk
 
-      # Создание виртуального окружения и установка buildozer/cython
-      - name: Create Virtual Environment and Install Dependencies
+      # Создание venv, обновление pip и установка инструментов сборки
+      - name: Setup Virtual Environment and Tools
         run: |
           python -m venv .venv
           source .venv/bin/activate
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install buildozer cython setuptools
 
-      # Запуск сборки внутри активированного виртуального окружения
-      - name: Build with Buildozer
+      # Запуск сборки Buildozer строго внутри активированного виртуального окружения
+      - name: Build Android APK
         run: |
           source .venv/bin/activate
           buildozer -v android debug
 
-      - name: Upload Artifact
+      # Сохранение готового APK-файла в артефакты GitHub
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: package
+          name: android-debug-apk
           path: bin/*.apk
-
