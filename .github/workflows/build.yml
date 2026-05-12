@@ -1,22 +1,18 @@
-name: Build APK
-on: [push, pull_request]
-
+name: Build Kivy App to APK
+on: push
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Build with Buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1
-        id: buildozer
+      - uses: actions/checkout@v4
+      - name: Build APK
+        uses: digreatbrian/buildozer-action@v2
         with:
-          command: buildozer android debug
-          buildozer_version: stable
-
-      - name: Upload APK
+          python-version: 3.9
+          buildozer-cmd: buildozer -v android debug
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: package
-          path: ${{ steps.buildozer.outputs.filename }}
+          path: ./bin/*.apk
+
